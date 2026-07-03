@@ -1,0 +1,15 @@
+[package]
+name = "meld"
+version = "0.1.0"
+edition = "2024"
+
+[tef]
+version = "0.1"
+
+[dependencies]
+
+[build-dependencies]
+toml = "1.1.2"
+
+[lib]
+path = "src/lib.rs"
