@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Comprehensive Test</title>
+  </head>
+  <body>
+    <h1>Comprehensive Loop and Function Test</h1>
+
+    <!-- Root variables -->
+    <section>
+      <h2>Root Level</h2>
+      <p>Name: {{ concat(firstName, " ", lastName) }}</p>
+      <p>Has items: {if length(items) > 0}Yes{/if}</p>
+    </section>
+
+    <!-- Nested loops -->
+    <section>
+      <h2>Items</h2>
+      <ul>
+        {each items as item, idx}
+        <li>
+          Item {{ idx }}: {{ item.name }} {if item.price} - ${{ item.price }}
+          {/if}
+        </li>
+        {/each}
+      </ul>
+    </section>
+
+    <!-- Nested categories -->
+    <section>
+      <h2>Categories</h2>
+      {each categories as cat, catIdx}
+      <div>
+        <h3>{{ cat.title }} ({{ length(cat.items) }} items)</h3>
+        <ul>
+          {each cat.items as item, itemIdx}
+          <li>{{ item }}</li>
+          {/each}
+        </ul>
+      </div>
+      {/each}
+    </section>
+
+    <!-- After loops - root variables again -->
+    <section>
+      <h2>Footer</h2>
+      <p>Total items: {{ length(items) }}</p>
+      <p>Owner: {{ firstName }} {{ lastName }}</p>
+    </section>
+  </body>
+</html>

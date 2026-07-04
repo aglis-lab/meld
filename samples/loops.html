@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meld Loop Example</title>
+  </head>
+  <body>
+    <h1>Items List</h1>
+    <ul>
+      {each items as item, idx}
+      <li>{{ idx }}: {{ item.name }} - ${{ item.price }}</li>
+      {/each}
+    </ul>
+
+    <h1>After Loop - Root Variables</h1>
+    <p>First name: {{ firstName }}</p>
+    <p>Last name: {{ lastName }}</p>
+
+    <h1>Condition Tests</h1>
+    {if email}
+    <p>Email is: {{ email }}</p>
+    {/if}
+
+    <h1>Helper Functions</h1>
+    {if description}
+    <p>Description: {{ description }}</p>
+    {/if}
+
+    <h1>Concatenation Test</h1>
+    <p>Full name: {{ concat(firstName, " ", lastName) }}</p>
+
+    <h1>Length Helper</h1>
+    <p>Item count: {{ length(items) }}</p>
+  </body>
+</html>

@@ -1,5 +1,4 @@
 use std::fs;
-
 use toml::Table;
 
 fn main() {
@@ -11,11 +10,15 @@ fn main() {
         .parse::<Table>()
         .expect("Failed to parse Cargo.toml");
 
-    if let Some(package) = parsed_content.get("tef").and_then(|p| p.as_table()) {
-        if let Some(version) = package.get("version").and_then(|v| v.as_str()) {
-            println!("cargo:rustc-env=TEF_VERSION={}", version);
+    if let Some(package) = parsed_content.get("package").and_then(|p| p.as_table()) {
+        if let Some(metadata) = package.get("metadata").and_then(|m| m.as_table()) {
+            if let Some(tef) = metadata.get("tef").and_then(|t| t.as_table()) {
+                if let Some(version) = tef.get("version").and_then(|v| v.as_str()) {
+                    println!("cargo:rustc-env=TEF_VERSION={}", version);
+                }
+            }
         }
     }
 
-    println!("cargo:rerun-if-changed={}", cargo_path);
+    println!("cargo:rerun-if-changed=Cargo.toml");
 }
