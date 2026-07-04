@@ -18,5 +18,15 @@ thiserror = "2.0.18"
 [build-dependencies]
 toml = "1.1.2"
 
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
 [lib]
 path = "src/lib.rs"
+
+[[bench]]
+name = "single_module"
+path = "benches/single_module.rs"
+harness = false
+
+

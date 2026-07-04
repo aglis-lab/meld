@@ -24,7 +24,6 @@ pub struct Evaluator<'a> {
     evaluation_stack: Stack<'a>,
 }
 
-// TODO: Need to implement a proper way to make a pool of output and evaluation stack for better performance
 impl<'a> Evaluator<'a> {
     #[inline(always)]
     pub fn new(program: &'a Program, config: EvaluatorConfig) -> Self {
@@ -205,7 +204,6 @@ impl<'a> Evaluator<'a> {
         Ok(10)
     }
 
-    #[inline(always)]
     fn call(&mut self, pc: usize) -> anyhow::Result<usize> {
         let helper_range = self.program.get_op_range(pc + 1)?;
         let helper_bytes = self.program.get_content(helper_range)?;

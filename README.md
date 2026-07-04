@@ -25,7 +25,7 @@ Template
     │
     ▼
 +-------------+
-|   Compiler  |
+|   Builder   |
 +-------------+
     │
     ▼
@@ -33,11 +33,11 @@ Template
     │
     ├──────────────┐
     ▼              ▼
-Rust Runtime   Go Runtime
+Rust Evaluator   Go Evaluator
     │              │
     └──────┬───────┘
            ▼
-        HTML Output
+        HTML/etc Output
 ```
 
 ## Why TEF?
@@ -65,14 +65,16 @@ language.
 
 ```text
 meld/
-├── compiler/
-├── runtime/
-├── tef/
-├── adapters/
-│   ├── react/
-│   ├── svelte/
-│   └── vue/
+├── src/
+│   ├── builder/
+|   |   ├── adapters/
+│   │   │   ├── react
+│   │   │   ├── svelte
+│   │   │   └── vue
+│   ├── evaluator/
 └── examples/
+└── benches/
+└── samples/
 ```
 
 ## Vision

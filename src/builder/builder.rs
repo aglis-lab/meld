@@ -86,6 +86,7 @@ impl Builder {
                                     self.instructions.push(Instruction::Out(expr));
                                 }
                             }
+
                             prev_index = new_index;
                             index = new_index;
                         }
@@ -378,7 +379,8 @@ impl Builder {
 
         let version = self.version;
         let tef_body_length = tef_body.len() as u32;
-        let content_length = content.len() as u32 + symbol.len() as u32;
+        let symbol_length = symbol.len() as u32;
+        let content_length = content.len() as u32 + symbol_length;
         let content = [symbol, content].concat();
         let checksum = hex::decode(sha256::digest(&content)).unwrap();
 
@@ -478,6 +480,7 @@ impl Builder {
         symbol.extend_from_slice(name.as_bytes());
     }
 
+    #[inline(always)]
     fn calculate_symbol_length(&self) -> usize {
         let mut total = 0usize;
 

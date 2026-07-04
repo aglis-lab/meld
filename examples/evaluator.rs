@@ -6,49 +6,114 @@ fn main() {
         path = args().nth(1).unwrap();
     }
 
-    let content = fs::read(path).unwrap();
-    let program = meld::evaluator::Program::new(&content).unwrap();
+    let ext = path
+        .rsplit('.')
+        .next()
+        .unwrap_or_else(|| panic!("Failed to get file extension for {}", path));
+
+    let output_path = path[..path.len() - ext.len()].to_string() + "out.html";
+
+    let (program, payload) = create_evaluator(&path);
     let mut eval = meld::evaluator::Evaluator::new(
         &program,
         meld::evaluator::EvaluatorConfig {
             ignore_missing_variables: true,
         },
     );
+    eval.run(&payload).expect("failed to run the evaluator");
+    let content = eval.output();
 
-    let payload_str = r#"{
-        "username": "alice",
-        "email": "alice@example.com",
-        "age": 30,
-        "nested": {
-            "field1": "nested_value",
-            "field2": 42,
-            "field3": true
-        },
-        "items": [
-            {"name": "Widget A", "price": 9.99},
-            {"name": "Widget B", "price": 14.99},
-            {"name": "Widget C", "price": 19.99}
-        ],
-        "description": "A great collection",
+    fs::write(&output_path, content).expect("Failed to write output");
+}
+
+fn create_evaluator(html_path: &str) -> (meld::evaluator::Program, serde_json::Value) {
+    // Load the compiled binary program
+    let program_bytes = fs::read(html_path).expect("Failed to read program file");
+
+    let compiled_program =
+        meld::evaluator::Program::new(&program_bytes).expect("Failed to create program");
+
+    // Create a comprehensive payload
+    let payload = serde_json::json!({
+        "username": "john_doe",
+        "email": "john@example.com",
         "firstName": "John",
         "lastName": "Doe",
-        "categories": [
+        "count": 42,
+        "active": true,
+        "status": "active",
+        "role": "admin",
+        "age": 25,
+        "balance": 1500,
+        "score": 85,
+        "attempts": 2,
+        "verified": true,
+        "premium": true,
+        "vip": false,
+        "disabled": false,
+        "description": "A great user profile",
+        "bio": "Software engineer",
+        "notes": "",
+        "items": [
             {
-                "title": "Widgets",
-                "items": ["Widget A", "Widget B", "Widget C"]
+                "name": "Product A",
+                "price": 99.99,
+                "available": true,
+                "stock": 10,
+                "tags": ["tag1", "tag2", "tag3"]
             },
             {
-                "title": "Gadgets",
-                "items": ["Gadget X", "Gadget Y"]
+                "name": "Product B",
+                "price": 149.99,
+                "available": true,
+                "stock": 5,
+                "tags": ["tag4", "tag5"]
+            },
+            {
+                "name": "Product C",
+                "price": 199.99,
+                "available": false,
+                "stock": 0,
+                "tags": ["tag6"]
+            }
+        ],
+        "categories": [
+            {
+                "title": "Electronics",
+                "items": [
+                    {
+                        "name": "Laptop",
+                        "price": 999.99,
+                        "featured": true,
+                        "variants": ["v1", "v2", "v3"]
+                    },
+                    {
+                        "name": "Mouse",
+                        "price": 29.99,
+                        "featured": false,
+                        "variants": ["wireless", "wired"]
+                    }
+                ]
+            },
+            {
+                "title": "Accessories",
+                "items": [
+                    {
+                        "name": "USB Cable",
+                        "price": 9.99,
+                        "featured": false,
+                        "variants": ["3ft", "6ft", "10ft"]
+                    },
+                    {
+                        "name": "Screen Protector",
+                        "price": 15.99,
+                        "featured": true,
+                        "variants": ["glass", "plastic"]
+                    }
+                ]
             }
         ]
-    }"#;
-    
-    let payload = serde_json::from_str(payload_str).unwrap();
+    });
 
-    if let Err(err) = eval.run(&payload) {
-        eprintln!("Error: {}", err);
-    } else {
-        println!("Output: {}", eval.output());
-    }
+    (compiled_program, payload)
 }
