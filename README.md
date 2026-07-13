@@ -1,8 +1,8 @@
 # Meld
 
-**Meld** is a compiler and lightweight runtime for server-side templates designed for performance and portability.
+**Meld** is a portable template compiler. Write once, compile once, execute anywhere.
 
-Instead of interpreting template syntax at runtime, Meld compiles templates once into a compact, portable **Template Execution Format (TEF)** that executes efficiently across different languages and platforms. Think of it as WebAssembly for templates.
+Meld compiles templates into **TEF (Template Execution Format)**—a compact, language-agnostic bytecode that runs natively on Rust, Go, Java, Python, PHP, and beyond. No runtime parsing. No language-specific code generation. Just fast, portable template execution at 50K–80K ops/sec.
 
 ### Why Meld?
 
