@@ -1,0 +1,32 @@
+{
+  "firstName": "John",
+  "lastName": "Doe",
+  "items": [
+    {
+      "name": "Laptop",
+      "price": 1299.99
+    },
+    {
+      "name": "Mouse",
+      "price": 29.99
+    },
+    {
+      "name": "Keyboard",
+      "price": 89.99
+    }
+  ],
+  "categories": [
+    {
+      "title": "Electronics",
+      "items": ["Desktop Computer", "Monitor", "Headphones"]
+    },
+    {
+      "title": "Accessories",
+      "items": ["USB Cable", "HDMI Cable", "Power Adapter"]
+    },
+    {
+      "title": "Software",
+      "items": ["Operating System", "Office Suite", "Developer Tools"]
+    }
+  ]
+}

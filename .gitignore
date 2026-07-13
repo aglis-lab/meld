@@ -1,0 +1,7 @@
+/target
+/templates/*.bhtml
+/templates/*.out.html
+/doc/stats/*
+
+!doc/stats/.gitkeep
+.DS_Store

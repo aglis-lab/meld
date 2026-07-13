@@ -1,0 +1,49 @@
+[package]
+name = "meld"
+version = "0.0.1"
+edition = "2024"
+
+[package.metadata.tef]
+version = "0.1"
+
+[dependencies]
+anyhow = "1.0"
+hex = "0.4.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha256 = "1.6.0"
+thiserror = "2.0.18"
+
+[build-dependencies]
+toml = "1.1.2"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.10.2"
+handlebars = "5.1"
+askama = "0.16.0"
+
+[lib]
+path = "src/lib.rs"
+
+[[bench]]
+name = "meld"
+path = "benches/meld.rs"
+harness = false
+
+[[bench]]
+name = "multi"
+path = "benches/multi.rs"
+harness = false
+
+[profile.release]
+debug = false
+opt-level = 3
+lto = true
+strip = true
+
+[profile.bench]
+inherits = "release"
+# debug = 1
+# lto = false
+# strip = false

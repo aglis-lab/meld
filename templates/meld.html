@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Comprehensive Template Benchmark</title>
+
+    <style>
+      /* CSS Variables for easy color adjustments */
+      :root {
+        --primary-color: #2563eb;
+        --background: #f8fafc;
+        --text-color: #0f172a;
+        --card-bg: #ffffff;
+      }
+
+      /* Reset and Base Styles */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        scroll-behavior: smooth;
+      }
+
+      body {
+        background-color: var(--background);
+        color: var(--text-color);
+        line-height: 1.6;
+      }
+
+      /* Navigation Bar */
+      nav {
+        position: fixed;
+        top: 0;
+        width: 100%;
+        background-color: var(--card-bg);
+        padding: 1rem 2rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+      }
+
+      .nav-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .nav-links a {
+        margin-left: 2rem;
+        text-decoration: none;
+        color: var(--text-color);
+        font-weight: 500;
+        transition: color 0.3s;
+      }
+
+      .nav-links a:hover {
+        color: var(--primary-color);
+      }
+
+      /* Full-Height Sections */
+      section {
+        min-height: 100vh;
+        padding: 8rem 2rem 4rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+      }
+
+      /* Hero Section Specifics */
+      #home {
+        background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+      }
+
+      h1 {
+        font-size: 3.5rem;
+        margin-bottom: 1rem;
+        color: var(--primary-color);
+      }
+
+      h2 {
+        font-size: 2.5rem;
+        margin-bottom: 2rem;
+        color: var(--primary-color);
+      }
+
+      p {
+        font-size: 1.2rem;
+        max-width: 600px;
+        margin-bottom: 2rem;
+        color: #475569;
+      }
+
+      /* Buttons */
+      button {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        padding: 1rem 2rem;
+        border-radius: 0.5rem;
+        font-size: 1.1rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition:
+          transform 0.2s,
+          opacity 0.2s;
+      }
+
+      button:hover {
+        opacity: 0.9;
+        transform: translateY(-2px);
+      }
+
+      /* Features Grid Layout */
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        max-width: 1200px;
+        width: 100%;
+      }
+
+      .card {
+        background-color: var(--card-bg);
+        padding: 2.5rem;
+        border-radius: 1rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        transition: transform 0.3s;
+      }
+
+      .card:hover {
+        transform: translateY(-5px);
+      }
+
+      .card h3 {
+        margin-bottom: 1rem;
+        font-size: 1.5rem;
+      }
+
+      .stats-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.5rem;
+        max-width: 1200px;
+        width: 100%;
+      }
+
+      .stat-card {
+        background: var(--card-bg);
+        padding: 2rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        border-left: 4px solid var(--primary-color);
+      }
+
+      .stat-value {
+        font-size: 2rem;
+        font-weight: bold;
+        color: var(--primary-color);
+        margin-bottom: 0.5rem;
+      }
+
+      .stat-label {
+        font-size: 0.9rem;
+        color: #64748b;
+      }
+
+      .item-list {
+        list-style: none;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        justify-content: center;
+        max-width: 1200px;
+        width: 100%;
+      }
+
+      .item-badge {
+        background: var(--card-bg);
+        padding: 0.75rem 1.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        font-size: 0.95rem;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Navigation -->
+    <nav>
+      <div class="nav-container">
+        <h2>Meld Benchmark</h2>
+        <div class="nav-links">
+          <a href="#home">Home</a>
+          <a href="#template-features">Features</a>
+          <a href="#stats">Statistics</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home">
+      <h1>Template Rendering Benchmark</h1>
+      <p>
+        Comprehensive Meld template engine benchmark with 10M iterations testing
+        all supported operations
+      </p>
+      <button onclick="showBenchmarkInfo()">Learn More</button>
+    </section>
+
+    <!-- Template Features Section -->
+    <section id="template-features">
+      <h2>All Supported Operations</h2>
+
+      <!-- TEXT operations -->
+      <div class="card" style="width: 100%; max-width: 1200px">
+        <h3>Benchmark Coverage</h3>
+        <p>This template exercises:</p>
+        <ul class="item-list">
+          <li class="item-badge">TEXT output</li>
+          <li class="item-badge">LOOKUP_OUT variables</li>
+          <li class="item-badge">
+            Helper functions (length, concat, empty, not_empty, coalesce)
+          </li>
+          <li class="item-badge">
+            All comparisons (EQ, NEQ, GT, LT, GTE, LTE)
+          </li>
+          <li class="item-badge">Logical operators (AND, OR, NOT)</li>
+          <li class="item-badge">ITERATE loops with nested content</li>
+          <li class="item-badge">Nested conditions</li>
+        </ul>
+      </div>
+
+      <!-- Direct variable output -->
+      <div class="stats-container" style="margin-top: 3rem">
+        <div class="stat-card">
+          <div class="stat-value">{{ username }}</div>
+          <div class="stat-label">Username</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">{{ email }}</div>
+          <div class="stat-label">Email Address</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">{{ concat(firstName, " ", lastName) }}</div>
+          <div class="stat-label">Full Name</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">{{ length(items) }}</div>
+          <div class="stat-label">Total Items</div>
+        </div>
+      </div>
+
+      <!-- Conditional sections -->
+      <div
+        class="card"
+        style="width: 100%; max-width: 1200px; margin-top: 3rem"
+      >
+        {if active && verified}
+        <h3>✓ Active & Verified Account</h3>
+        {/if} {if premium || vip}
+        <p>Premium member status enabled</p>
+        {/if} {if !disabled}
+        <p>Account is fully enabled</p>
+        {/if}
+      </div>
+
+      <!-- Comparison conditions -->
+      {if age > 18}
+      <div
+        class="card"
+        style="width: 100%; max-width: 1200px; margin-top: 2rem"
+      >
+        <h3>Adult User Detected</h3>
+        <p>Age: {{ age }} years</p>
+      </div>
+      {/if} {if balance >= 100}
+      <div class="card" style="width: 100%; max-width: 1200px">
+        <h3>Premium Account</h3>
+        <p>Balance: ${{ balance }}</p>
+      </div>
+      {/if}
+
+      <!-- Loops section -->
+      <div
+        class="card"
+        style="width: 100%; max-width: 1200px; margin-top: 3rem"
+      >
+        <h3>Products</h3>
+        {each items as item, idx}
+        <div
+          style="
+            margin: 1rem 0;
+            padding: 1rem;
+            background: #f1f5f9;
+            border-radius: 0.5rem;
+          "
+        >
+          Item {{ idx }}: <strong>{{ item.name }}</strong> - ${{ item.price }}
+          {if item.available}
+          <span style="color: green; margin-left: 1rem"
+            >✓ Available ({{ length(item.tags) }} tags)</span
+          >
+          {/if} {if item.stock > 0}
+          <span style="color: blue; margin-left: 0.5rem"
+            >Stock: {{ item.stock }}</span
+          >
+          {/if}
+        </div>
+        {/each}
+      </div>
+
+      <!-- Nested loops -->
+      <div
+        class="card"
+        style="width: 100%; max-width: 1200px; margin-top: 2rem"
+      >
+        <h3>Categories & Products</h3>
+        {each categories as cat, catIdx}
+        <div
+          style="
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #dbeafe;
+            border-radius: 0.5rem;
+          "
+        >
+          <h4>{{ cat.title }} ({{ length(cat.items) }} products)</h4>
+          <div style="margin-top: 0.5rem">
+            {each cat.items as prod, prodIdx}
+            <span
+              style="
+                display: inline-block;
+                margin: 0.25rem;
+                padding: 0.5rem 1rem;
+                background: white;
+                border-radius: 0.25rem;
+              "
+            >
+              {{ prod.name }} - ${{ prod.price }} {if prod.featured}
+              <strong style="color: var(--primary-color)">⭐</strong>
+              {/if}
+            </span>
+            {/each}
+          </div>
+        </div>
+        {/each}
+      </div>
+    </section>
+
+    <!-- Statistics Section -->
+    <section id="stats">
+      <h2>Benchmark Statistics</h2>
+
+      <div class="stats-container">
+        <div class="stat-card">
+          <div class="stat-value">10M</div>
+          <div class="stat-label">Total Iterations</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">{{ count }}</div>
+          <div class="stat-label">Dynamic Values</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">{{ length(categories) }}</div>
+          <div class="stat-label">Nested Categories</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">{{ coalesce(bio, "Not set") }}</div>
+          <div class="stat-label">User Bio</div>
+        </div>
+      </div>
+
+      <!-- Footer section -->
+      <div
+        class="card"
+        style="width: 100%; max-width: 1200px; margin-top: 3rem"
+      >
+        <h3>Summary</h3>
+        <p>
+          User: <strong>{{ concat(firstName, " ", lastName) }}</strong><br />
+          Email: <strong>{{ email }}</strong><br />
+          Status: <strong>{{ status }}</strong><br />
+          Total Items: <strong>{{ length(items) }}</strong><br />
+          {if not_empty(description)} Description:
+          <strong>{{ description }}</strong>
+          {/if}
+        </p>
+      </div>
+    </section>
+
+    <script>
+      // Helper functions for interactive features
+      function showBenchmarkInfo() {
+        alert(
+          "This template exercises all Meld operations:\n\n" +
+            "• TEXT operations (static content)\n" +
+            "• LOOKUP_OUT ({{ variable }})\n" +
+            "• Helper functions: length(), concat(), empty(), not_empty(), coalesce()\n" +
+            "• All comparisons: ==, !=, >, <, >=, <=\n" +
+            "• Logical operators: &&, ||, !\n" +
+            "• ITERATE loops with nested access\n" +
+            "• Conditional blocks with complex conditions\n\n" +
+            "Benchmark: 10,000,000 iterations",
+        );
+      }
+
+      // Scroll tracking for navigation
+      window.addEventListener("scroll", () => {
+        let current = "";
+        const sections = document.querySelectorAll("section");
+
+        sections.forEach((section) => {
+          const sectionTop = section.offsetTop;
+          if (window.scrollY >= sectionTop - 200) {
+            current = section.getAttribute("id");
+          }
+        });
+
+        // Update active nav link (optional)
+        if (current) {
+          document.querySelectorAll(".nav-links a").forEach((link) => {
+            link.style.color = "inherit";
+          });
+          const activeLink = document.querySelector(
+            `.nav-links a[href="#${current}"]`,
+          );
+          if (activeLink) {
+            activeLink.style.color = "var(--primary-color)";
+          }
+        }
+      });
+
+      // Performance monitoring
+      window.addEventListener("load", () => {
+        const perfData = window.performance.timing;
+        const pageLoadTime = perfData.loadEventEnd - perfData.navigationStart;
+        console.log("Page load time: " + pageLoadTime + "ms");
+      });
+    </script>
+  </body>
+</html>
