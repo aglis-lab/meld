@@ -46,6 +46,11 @@ func NewRuntime(program *Program, config RuntimeConfig) *Runtime {
 	}
 }
 
+// RegisterCallable registers a custom helper function
+func (r *Runtime) RegisterCallable(name string, callee Callee) {
+	r.calleeFunc[name] = callee
+}
+
 // Run executes the program with the given payload
 func (r *Runtime) Run(payload Value) error {
 	r.clear()
@@ -389,15 +394,7 @@ func (r *Runtime) iterate(pc uint32) (uint32, error) {
 		return 0, fmt.Errorf("iterate expects a collection on evaluation stack")
 	}
 
-	if collection == nil {
-		// Skip iteration for null values
-		delete(r.iterateIndices, pc)
-		delete(r.scopeMarks, pc)
-		r.evaluationStack.Pop()
-		return doneTarget, nil
-	}
-
-	arr, ok := collection.([]interface{})
+	arr, ok := collection.([]any)
 	if !ok {
 		return 0, fmt.Errorf("iterate requires array collection")
 	}

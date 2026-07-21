@@ -1,9 +1,22 @@
 package runtime
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 )
+
+func equal(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
 
 // Program represents compiled template bytecode
 type Program struct {
@@ -22,11 +35,18 @@ func NewProgram(bytecode []byte) (*Program, error) {
 	version := binary.LittleEndian.Uint16(bytecode[0:2])
 	instructionLen := binary.LittleEndian.Uint32(bytecode[2:6])
 	contentLen := binary.LittleEndian.Uint32(bytecode[6:10])
-	// checksum := bytecode[10:42] // TODO: validate checksum if needed
+	contentEnd := 42 + instructionLen + contentLen
 
-	expectedLen := 42 + instructionLen + contentLen
-	if uint32(len(bytecode)) < expectedLen {
-		return nil, fmt.Errorf("bytecode too short: expected %d bytes, got %d", expectedLen, len(bytecode))
+	// Validate length before accessing bytecode
+	if uint32(len(bytecode)) < contentEnd {
+		return nil, fmt.Errorf("bytecode too short: expected %d bytes, got %d", contentEnd, len(bytecode))
+	}
+
+	// Validate checksum
+	storedChecksum := bytecode[10:42]
+	calculateChecksum := sha256.Sum256(bytecode[42:contentEnd])
+	if !equal(storedChecksum, calculateChecksum[:]) {
+		return nil, fmt.Errorf("checksum mismatch: expected %x, got %x", storedChecksum, calculateChecksum)
 	}
 
 	instructions := bytecode[42 : 42+instructionLen]

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"testing"
 )
@@ -166,12 +167,14 @@ func encodeU32(val uint32) []byte {
 
 // createTestBytecode creates a valid TEF bytecode for testing
 func createTestBytecode(instructions []byte, content []byte) []byte {
-	// Header: version (2) + instr_len (4) + content_len (4) + checksum (32)
+	payload := append(append([]byte{}, instructions...), content...)
+	checksum := sha256.Sum256(payload)
+
 	header := make([]byte, 42)
 	binary.LittleEndian.PutUint16(header[0:2], 1)                         // version
 	binary.LittleEndian.PutUint32(header[2:6], uint32(len(instructions))) // instruction length
 	binary.LittleEndian.PutUint32(header[6:10], uint32(len(content)))     // content length
-	// Skip checksum (bytes 10-42)
+	copy(header[10:42], checksum[:])                                      // checksum
 
 	return append(append(header, instructions...), content...)
 }

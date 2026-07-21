@@ -1,11 +1,13 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/aglis-lab/meld-go/runtime"
 )
@@ -66,6 +68,16 @@ func compiledExample() {
 	}
 
 	eval := runtime.NewRuntime(program, runtime.NewRuntimeConfig())
+	eval.RegisterCallable("toUpperCase", func(args ...runtime.Value) (runtime.Value, error) {
+		if len(args) != 1 {
+			return nil, fmt.Errorf("toUpperCase expects 1 argument, got %d", len(args))
+		}
+		s, ok := args[0].(string)
+		if !ok {
+			s = fmt.Sprint(args[0])
+		}
+		return strings.ToUpper(s), nil
+	})
 	err = eval.Run(payload)
 	if err != nil {
 		log.Fatal(err)
@@ -311,10 +323,15 @@ func helperExample() {
 
 // Helper functions
 func createBytecode(instructions, content []byte) []byte {
+	payload := append(append([]byte{}, instructions...), content...)
+	checksum := sha256.Sum256(payload)
+
 	header := make([]byte, 42)
 	binary.LittleEndian.PutUint16(header[0:2], 1)
 	binary.LittleEndian.PutUint32(header[2:6], uint32(len(instructions)))
 	binary.LittleEndian.PutUint32(header[6:10], uint32(len(content)))
+	copy(header[10:42], checksum[:])
+
 	return append(append(header, instructions...), content...)
 }
 
