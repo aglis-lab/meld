@@ -13,6 +13,12 @@ type RuntimeConfig struct {
 
 type Callee func(args ...Value) (Value, error)
 
+type iterateMetadata struct {
+	itemName   string
+	indexName  string
+	doneTarget uint32
+}
+
 // NewRuntimeConfig creates a default config
 func NewRuntimeConfig() RuntimeConfig {
 	return RuntimeConfig{
@@ -30,6 +36,11 @@ type Runtime struct {
 	iterateIndices  map[uint32]int
 	evaluationStack *Stack
 	calleeFunc      map[string]Callee
+	lookupKeys      map[uint32]string
+	helperNames     map[uint32]string
+	constantValues  map[uint32]Value
+	iterateScopes   map[uint32]map[string]interface{}
+	iterateMetadata map[uint32]iterateMetadata
 }
 
 // NewRuntime creates a new runtime
@@ -43,6 +54,11 @@ func NewRuntime(program *Program, config RuntimeConfig) *Runtime {
 		iterateIndices:  make(map[uint32]int, defaultStackCapacity),
 		evaluationStack: NewStack(),
 		calleeFunc:      make(map[string]Callee),
+		lookupKeys:      make(map[uint32]string),
+		helperNames:     make(map[uint32]string),
+		constantValues:  make(map[uint32]Value),
+		iterateScopes:   make(map[uint32]map[string]interface{}),
+		iterateMetadata: make(map[uint32]iterateMetadata),
 	}
 }
 
@@ -61,10 +77,10 @@ func (r *Runtime) Run(payload Value) error {
 
 	var pc uint32
 	for {
-		opcode, err := r.program.GetOp(pc)
-		if err != nil {
-			return err
+		if pc >= uint32(len(r.program.Instructions)) {
+			return fmt.Errorf("pc out of bounds: %d", pc)
 		}
+		opcode := r.program.Instructions[pc]
 
 		var step uint32
 		var stepErr error
@@ -192,13 +208,17 @@ func (r *Runtime) out() (uint32, error) {
 
 // lookup handles OpLookup: lookup variable and push to evaluation stack (9 bytes)
 func (r *Runtime) lookup(pc uint32) (uint32, error) {
-	start, end, err := r.program.GetOpRange(pc + 1)
-	if err != nil {
-		return 0, err
-	}
-	key, err := r.program.GetContentString(start, end)
-	if err != nil {
-		return 0, err
+	key, ok := r.lookupKeys[pc]
+	if !ok {
+		start, end, err := r.program.GetOpRange(pc + 1)
+		if err != nil {
+			return 0, err
+		}
+		key, err = r.program.GetContentString(start, end)
+		if err != nil {
+			return 0, err
+		}
+		r.lookupKeys[pc] = key
 	}
 
 	val, found := r.scopeStack.Get(key)
@@ -215,13 +235,17 @@ func (r *Runtime) lookup(pc uint32) (uint32, error) {
 
 // lookupOut handles OpLookupOut: lookup variable and output directly (9 bytes)
 func (r *Runtime) lookupOut(pc uint32) (uint32, error) {
-	start, end, err := r.program.GetOpRange(pc + 1)
-	if err != nil {
-		return 0, err
-	}
-	key, err := r.program.GetContentString(start, end)
-	if err != nil {
-		return 0, err
+	key, ok := r.lookupKeys[pc]
+	if !ok {
+		start, end, err := r.program.GetOpRange(pc + 1)
+		if err != nil {
+			return 0, err
+		}
+		key, err = r.program.GetContentString(start, end)
+		if err != nil {
+			return 0, err
+		}
+		r.lookupKeys[pc] = key
 	}
 
 	val, found := r.scopeStack.Get(key)
@@ -238,6 +262,11 @@ func (r *Runtime) lookupOut(pc uint32) (uint32, error) {
 
 // pushConst handles OpPushConst: push literal value to evaluation stack (10 bytes)
 func (r *Runtime) pushConst(pc uint32) (uint32, error) {
+	if val, ok := r.constantValues[pc]; ok {
+		r.evaluationStack.Push(val)
+		return 10, nil
+	}
+
 	literalType, err := r.program.GetOp(pc + 1)
 	if err != nil {
 		return 0, err
@@ -275,19 +304,24 @@ func (r *Runtime) pushConst(pc uint32) (uint32, error) {
 		return 0, fmt.Errorf("unknown literal type: %d", literalType)
 	}
 
+	r.constantValues[pc] = val
 	r.evaluationStack.Push(val)
 	return 10, nil
 }
 
 // call handles OpCall: call helper functions (10 bytes)
 func (r *Runtime) call(pc uint32) (uint32, error) {
-	start, end, err := r.program.GetOpRange(pc + 1)
-	if err != nil {
-		return 0, err
-	}
-	helperName, err := r.program.GetContentString(start, end)
-	if err != nil {
-		return 0, err
+	helperName, ok := r.helperNames[pc]
+	if !ok {
+		start, end, err := r.program.GetOpRange(pc + 1)
+		if err != nil {
+			return 0, err
+		}
+		helperName, err = r.program.GetContentString(start, end)
+		if err != nil {
+			return 0, err
+		}
+		r.helperNames[pc] = helperName
 	}
 
 	argCount, err := r.program.GetOp(pc + 9)
@@ -296,8 +330,7 @@ func (r *Runtime) call(pc uint32) (uint32, error) {
 	}
 
 	// Get arguments from evaluation stack
-	length := r.evaluationStack.Len()
-	args, ok := r.evaluationStack.DrainRange(length-int(argCount), length)
+	args, ok := r.evaluationStack.DrainTop(int(argCount))
 	if !ok {
 		return 0, fmt.Errorf("not enough arguments on evaluation stack")
 	}
@@ -356,27 +389,32 @@ func (r *Runtime) call(pc uint32) (uint32, error) {
 
 // iterate handles OpIterate: iterate over arrays (21 bytes)
 func (r *Runtime) iterate(pc uint32) (uint32, error) {
-	itemStart, itemEnd, err := r.program.GetOpRange(pc + 1)
-	if err != nil {
-		return 0, err
+	metadata, ok := r.iterateMetadata[pc]
+	if !ok {
+		itemStart, itemEnd, err := r.program.GetOpRange(pc + 1)
+		if err != nil {
+			return 0, err
+		}
+		indexStart, indexEnd, err := r.program.GetOpRange(pc + 9)
+		if err != nil {
+			return 0, err
+		}
+		doneTarget, err := r.program.GetOpU32(pc + 17)
+		if err != nil {
+			return 0, err
+		}
+		itemName, err := r.program.GetContentString(itemStart, itemEnd)
+		if err != nil {
+			return 0, err
+		}
+		indexName, err := r.program.GetContentString(indexStart, indexEnd)
+		if err != nil {
+			return 0, err
+		}
+		metadata = iterateMetadata{itemName: itemName, indexName: indexName, doneTarget: doneTarget}
+		r.iterateMetadata[pc] = metadata
 	}
-	indexStart, indexEnd, err := r.program.GetOpRange(pc + 9)
-	if err != nil {
-		return 0, err
-	}
-	doneTarget, err := r.program.GetOpU32(pc + 17)
-	if err != nil {
-		return 0, err
-	}
-
-	itemName, err := r.program.GetContentString(itemStart, itemEnd)
-	if err != nil {
-		return 0, err
-	}
-	indexName, err := r.program.GetContentString(indexStart, indexEnd)
-	if err != nil {
-		return 0, err
-	}
+	itemName, indexName, doneTarget := metadata.itemName, metadata.indexName, metadata.doneTarget
 
 	// Set base depth if not already set
 	baseDepth, exists := r.scopeMarks[pc]
@@ -410,7 +448,11 @@ func (r *Runtime) iterate(pc uint32) (uint32, error) {
 	}
 
 	// Create scope with item and index
-	scope := make(map[string]interface{})
+	scope, ok := r.iterateScopes[pc]
+	if !ok {
+		scope = make(map[string]interface{}, 2)
+		r.iterateScopes[pc] = scope
+	}
 	scope[itemName] = arr[nextIndex]
 	scope[indexName] = float64(nextIndex)
 	r.scopeStack.Push(scope)

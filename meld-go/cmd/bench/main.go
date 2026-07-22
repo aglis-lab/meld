@@ -34,8 +34,8 @@ func main() {
 	// Handlebars isn't benchmarked because it's have bad support at the moment
 	// handlebarsBenchmark()
 
-	htmlBenchmark("stats/html.csv")
-	gonjaBenchmark("stats/gonja.csv")
+	// htmlBenchmark("stats/html.csv")
+	// gonjaBenchmark("stats/gonja.csv")
 	meldBenchmark("stats/meld.csv")
 }
 

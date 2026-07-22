@@ -5,7 +5,7 @@ import { Bench } from "tinybench";
 import { Program, Runtime, newRuntimeConfig } from "../../runtime/index.ts";
 
 const SAMPLE_SIZE = 10;
-const BENCH_ITERATIONS = Array.from({ length: 10 }, (_, i) => (i + 1) * 1000);
+const BENCH_ITERATIONS = Array.from({ length: 10 }, (_, i) => (i + 1) * 10000);
 
 type BenchRow = {
   n: number;

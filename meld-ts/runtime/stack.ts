@@ -5,7 +5,6 @@ export class Stack {
 
   constructor() {
     this.values = [];
-    this.values.length = 0;
   }
 
   push(v: unknown): void {
@@ -33,16 +32,29 @@ export class Stack {
       return null;
     }
 
-    return this.values.splice(start, end - start);
+    const values = this.values.slice(start, end);
+    this.values.length = start;
+    return values;
+  }
+
+  drainTop(count: number): unknown[] | null {
+    const start = this.values.length - count;
+    if (count < 0 || start < 0) {
+      return null;
+    }
+
+    const values = this.values.slice(start);
+    this.values.length = start;
+    return values;
   }
 }
 
 export class ScopeStack {
   private scopes: unknown[];
+  private readonly pathParts = new Map<string, string[]>();
 
   constructor() {
     this.scopes = new Array<unknown>(0);
-    this.scopes.length = 0;
   }
 
   push(scope: unknown): void {
@@ -72,10 +84,15 @@ export class ScopeStack {
   }
 
   get(key: string): unknown | undefined {
+    let parts = this.pathParts.get(key);
+    if (parts === undefined) {
+      parts = key.split(".");
+      this.pathParts.set(key, parts);
+    }
+
     for (let i = this.scopes.length - 1; i >= 0; i--) {
       let currentValue: unknown = this.scopes[i];
       let matchedCount = 0;
-      const parts = key.split(".");
 
       for (const part of parts) {
         if (

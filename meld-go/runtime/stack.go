@@ -68,9 +68,24 @@ func (s *Stack) DrainRange(start, end int) ([]Value, bool) {
 	return result, true
 }
 
+// DrainTop returns and removes the top count values without shifting the
+// values below them.
+func (s *Stack) DrainTop(count int) ([]Value, bool) {
+	start := len(s.values) - count
+	if count < 0 || start < 0 {
+		return nil, false
+	}
+
+	result := make([]Value, count)
+	copy(result, s.values[start:])
+	s.values = s.values[:start]
+	return result, true
+}
+
 // ScopeStack manages a stack of scope objects for variable lookups
 type ScopeStack struct {
-	scopes Stack
+	scopes    Stack
+	pathParts map[string][]string
 }
 
 // NewScopeStack creates a new scope stack
@@ -79,6 +94,7 @@ func NewScopeStack() *ScopeStack {
 		scopes: Stack{
 			values: make([]Value, 0, defaultStackCapacity),
 		},
+		pathParts: make(map[string][]string),
 	}
 }
 
@@ -106,13 +122,18 @@ func (ss *ScopeStack) Clear() {
 // Get looks up a variable in the scope stack, traversing from top to bottom
 // Supports dot notation for property access (e.g., "item.name")
 func (ss *ScopeStack) Get(key string) (Value, bool) {
+	parts, ok := ss.pathParts[key]
+	if !ok {
+		parts = strings.Split(key, ".")
+		ss.pathParts[key] = parts
+	}
+
 	// Search from top to bottom for the key
 	for i := len(ss.scopes.values) - 1; i >= 0; i-- {
 		scope := ss.scopes.values[i]
 
 		// Try to traverse the key parts (handles "item.name" style lookups)
 		var currentValue Value = scope
-		parts := strings.Split(key, ".")
 		matchedCount := 0
 
 		for _, part := range parts {

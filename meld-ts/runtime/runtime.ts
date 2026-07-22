@@ -38,11 +38,15 @@ export interface RuntimeConfig {
 
 export type Callee = (...args: any[]) => any;
 
-const OUTPUT_DECODER = new TextDecoder();
-
 type OutputChunk =
   | { type: 0; start: number; end: number }
   | { type: 1; value: any };
+
+type IterateMetadata = {
+  itemName: string;
+  indexName: string;
+  doneTarget: number;
+};
 
 export function newRuntimeConfig(): RuntimeConfig {
   return {
@@ -60,6 +64,11 @@ export class Runtime {
   private readonly iterateIndices: Map<number, number>;
   private readonly evaluationStack: Stack;
   private readonly calleeFunc: Map<string, Callee>;
+  private readonly constantValues: Map<number, any>;
+  private readonly iterateScopes: Map<number, { [key: string]: any }>;
+  private readonly lookupKeys: Map<number, string>;
+  private readonly helperNames: Map<number, string>;
+  private readonly iterateMetadata: Map<number, IterateMetadata>;
 
   constructor(program: Program, config: RuntimeConfig) {
     this.program = program;
@@ -71,6 +80,11 @@ export class Runtime {
     this.iterateIndices = new Map();
     this.evaluationStack = new Stack();
     this.calleeFunc = new Map();
+    this.constantValues = new Map();
+    this.iterateScopes = new Map();
+    this.lookupKeys = new Map();
+    this.helperNames = new Map();
+    this.iterateMetadata = new Map();
   }
 
   registerCallable(name: string, callee: Callee): void {
@@ -84,9 +98,13 @@ export class Runtime {
       this.scopeStack.push(payload);
     }
 
+    const instructions = this.program.instructions;
     let pc = 0;
     while (true) {
-      const opcode = this.program.getOp(pc);
+      const opcode = instructions[pc];
+      if (opcode === undefined) {
+        throw new Error(`pc out of bounds: ${pc}`);
+      }
       let step = 0;
 
       switch (opcode) {
@@ -181,10 +199,9 @@ export class Runtime {
     }
 
     let out = "";
-    const content = this.program.content;
     for (const chunk of this.outputChunks) {
       if (chunk.type === 0) {
-        out += OUTPUT_DECODER.decode(content.subarray(chunk.start, chunk.end));
+        out += this.program.getContentString(chunk.start, chunk.end);
       } else {
         out += stringifyValue(chunk.value);
       }
@@ -214,7 +231,8 @@ export class Runtime {
   }
 
   private text(pc: number): number {
-    const [start, end] = this.program.getOpRange(pc + 1);
+    const start = this.program.getOpU32(pc + 1);
+    const end = this.program.getOpU32(pc + 5);
     this.emitText(start, end);
     return 9;
   }
@@ -230,8 +248,13 @@ export class Runtime {
   }
 
   private lookup(pc: number): number {
-    const [start, end] = this.program.getOpRange(pc + 1);
-    const key = this.program.getContentString(start, end);
+    let key = this.lookupKeys.get(pc);
+    if (key === undefined) {
+      const start = this.program.getOpU32(pc + 1);
+      const end = this.program.getOpU32(pc + 5);
+      key = this.program.getContentString(start, end);
+      this.lookupKeys.set(pc, key);
+    }
     let val = this.scopeStack.get(key);
 
     if (val === undefined) {
@@ -246,8 +269,13 @@ export class Runtime {
   }
 
   private lookupOut(pc: number): number {
-    const [start, end] = this.program.getOpRange(pc + 1);
-    const key = this.program.getContentString(start, end);
+    let key = this.lookupKeys.get(pc);
+    if (key === undefined) {
+      const start = this.program.getOpU32(pc + 1);
+      const end = this.program.getOpU32(pc + 5);
+      key = this.program.getContentString(start, end);
+      this.lookupKeys.set(pc, key);
+    }
     const val = this.scopeStack.get(key);
 
     if (val === undefined) {
@@ -262,11 +290,17 @@ export class Runtime {
   }
 
   private pushConst(pc: number): number {
+    if (this.constantValues.has(pc)) {
+      this.evaluationStack.push(this.constantValues.get(pc));
+      return 10;
+    }
+
     const literalType = this.program.getOp(pc + 1);
-    const [start, end] = this.program.getOpRange(pc + 2);
+    let val: any;
+    const start = this.program.getOpU32(pc + 2);
+    const end = this.program.getOpU32(pc + 6);
     const content = this.program.getContentString(start, end);
 
-    let val: any;
     switch (literalType) {
       case LiteralString:
         val = content;
@@ -296,18 +330,23 @@ export class Runtime {
       default:
         throw new Error(`unknown literal type: ${literalType}`);
     }
+    this.constantValues.set(pc, val);
 
     this.evaluationStack.push(val);
     return 10;
   }
 
   private call(pc: number): number {
-    const [start, end] = this.program.getOpRange(pc + 1);
-    const helperName = this.program.getContentString(start, end);
+    let helperName = this.helperNames.get(pc);
+    if (helperName === undefined) {
+      const start = this.program.getOpU32(pc + 1);
+      const end = this.program.getOpU32(pc + 5);
+      helperName = this.program.getContentString(start, end);
+      this.helperNames.set(pc, helperName);
+    }
     const argCount = this.program.getOp(pc + 9);
 
-    const length = this.evaluationStack.len();
-    const args = this.evaluationStack.drainRange(length - argCount, length);
+    const args = this.evaluationStack.drainTop(argCount);
     if (!args) {
       throw new Error("not enough arguments on evaluation stack");
     }
@@ -365,12 +404,21 @@ export class Runtime {
   }
 
   private iterate(pc: number): number {
-    const [itemStart, itemEnd] = this.program.getOpRange(pc + 1);
-    const [indexStart, indexEnd] = this.program.getOpRange(pc + 9);
-    const doneTarget = this.program.getOpU32(pc + 17);
+    let metadata = this.iterateMetadata.get(pc);
+    if (metadata === undefined) {
+      const itemStart = this.program.getOpU32(pc + 1);
+      const itemEnd = this.program.getOpU32(pc + 5);
+      const indexStart = this.program.getOpU32(pc + 9);
+      const indexEnd = this.program.getOpU32(pc + 13);
+      metadata = {
+        itemName: this.program.getContentString(itemStart, itemEnd),
+        indexName: this.program.getContentString(indexStart, indexEnd),
+        doneTarget: this.program.getOpU32(pc + 17),
+      };
+      this.iterateMetadata.set(pc, metadata);
+    }
 
-    const itemName = this.program.getContentString(itemStart, itemEnd);
-    const indexName = this.program.getContentString(indexStart, indexEnd);
+    const { itemName, indexName, doneTarget } = metadata;
 
     let baseDepth = this.scopeMarks.get(pc);
     if (baseDepth === undefined) {
@@ -405,10 +453,13 @@ export class Runtime {
       return doneTarget;
     }
 
-    const scope: { [key: string]: any } = {
-      [itemName]: collection[nextIndex],
-      [indexName]: nextIndex,
-    };
+    let scope = this.iterateScopes.get(pc);
+    if (scope === undefined) {
+      scope = {};
+      this.iterateScopes.set(pc, scope);
+    }
+    scope[itemName] = collection[nextIndex];
+    scope[indexName] = nextIndex;
 
     this.scopeStack.push(scope);
     this.iterateIndices.set(pc, nextIndex + 1);

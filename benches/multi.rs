@@ -1,5 +1,5 @@
 use askama::Template;
-use criterion::{BatchSize, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
 use handlebars::{Context, Handlebars, Helper, HelperResult, Output, RenderContext};
 use serde_json::Value;
 use std::fs;

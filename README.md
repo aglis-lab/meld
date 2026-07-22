@@ -4,6 +4,9 @@
 
 Meld compiles templates into **TEF (Template Execution Format)**—a compact, language-agnostic bytecode that runs natively on Rust, Go, Java, Python, PHP, and beyond. No runtime parsing. No language-specific code generation. Just fast, portable template execution at 50K–80K ops/sec.
 
+See [`RUNTIME_PERFORMANCE.md`](RUNTIME_PERFORMANCE.md) for runtime optimization
+rationale, bytecode invariants, and benchmark guidance.
+
 ### Why Meld?
 
 - **Fast**: Compiled templates execute at near-native speed (~50K–80K ops/sec)

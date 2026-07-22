@@ -1,9 +1,16 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 const DEFAULT_STACK_CAPACITY: usize = 16;
 const DEFAULT_SCOPE_MARKS_CAPACITY: usize = 16;
 const DEFAULT_ITERATE_INDICES_CAPACITY: usize = 16;
+
+struct IterateMetadata {
+    item_name: String,
+    index_name: String,
+    done_target: usize,
+}
 
 use super::stack::*;
 use crate::{
@@ -53,6 +60,12 @@ pub struct Runtime<'a> {
 
     // Context for helper functions
     context: HashMap<String, Box<dyn Callable>>,
+
+    // Immutable program metadata cached after first use
+    lookup_keys: HashMap<usize, String>,
+    helper_names: HashMap<usize, String>,
+    constant_values: HashMap<usize, Value>,
+    iterate_metadata: HashMap<usize, Rc<IterateMetadata>>,
 }
 
 impl<'a> Runtime<'a> {
@@ -67,6 +80,10 @@ impl<'a> Runtime<'a> {
             scope_marks: HashMap::with_capacity(DEFAULT_SCOPE_MARKS_CAPACITY),
             iterate_indices: HashMap::with_capacity(DEFAULT_ITERATE_INDICES_CAPACITY),
             context: HashMap::new(), // No need to preallocate context, as it will be run before the evaluation or hot path
+            lookup_keys: HashMap::new(),
+            helper_names: HashMap::new(),
+            constant_values: HashMap::new(),
+            iterate_metadata: HashMap::new(),
         }
     }
 
@@ -193,12 +210,16 @@ impl<'a> Runtime<'a> {
     // 1 byte for opcode, 4 bytes for start, 4 bytes for end
     #[inline(always)]
     fn lookup(&mut self, pc: usize) -> anyhow::Result<usize> {
-        let range = self.program.get_op_range(pc + 1)?;
-        let content = self.program.get_content(range)?;
-        let lookup_key = std::str::from_utf8(content)?;
+        if !self.lookup_keys.contains_key(&pc) {
+            let range = self.program.get_op_range(pc + 1)?;
+            let content = self.program.get_content(range)?;
+            let lookup_key = std::str::from_utf8(content)?.to_owned();
+            self.lookup_keys.insert(pc, lookup_key);
+        }
+        let lookup_key = self.lookup_keys.get(&pc).expect("cached lookup key");
         let scope_value = self.scope_stack.get(lookup_key);
         if let Some(val) = scope_value {
-            self.evaluation_stack.push(Cow::Owned(val.clone()));
+            self.evaluation_stack.push(val);
         } else if !self.config.ignore_missing_variables {
             return Err(anyhow!("can't lookup variable {}", lookup_key));
         } else {
@@ -212,11 +233,15 @@ impl<'a> Runtime<'a> {
     // 1 byte for opcode, 4 bytes for start, 4 bytes for end
     #[inline(always)]
     fn lookup_out(&mut self, pc: usize) -> anyhow::Result<usize> {
-        let range = self.program.get_op_range(pc + 1)?;
-        let content = self.program.get_content(range)?;
-        let lookup_key = std::str::from_utf8(content)?;
+        if !self.lookup_keys.contains_key(&pc) {
+            let range = self.program.get_op_range(pc + 1)?;
+            let content = self.program.get_content(range)?;
+            let lookup_key = std::str::from_utf8(content)?.to_owned();
+            self.lookup_keys.insert(pc, lookup_key);
+        }
+        let lookup_key = self.lookup_keys.get(&pc).expect("cached lookup key");
         if let Some(val) = self.scope_stack.get(lookup_key) {
-            Self::append_value(&mut self.output, val);
+            Self::append_value(&mut self.output, val.as_ref());
         } else if !self.config.ignore_missing_variables {
             return Err(anyhow!("can't lookup variable {}", lookup_key));
         }
@@ -226,6 +251,11 @@ impl<'a> Runtime<'a> {
 
     #[inline(always)]
     fn push_const(&mut self, pc: usize) -> anyhow::Result<usize> {
+        if let Some(value) = self.constant_values.get(&pc) {
+            self.evaluation_stack.push(Cow::Owned(value.clone()));
+            return Ok(10);
+        }
+
         let literal_type = self.program.get_op(pc + 1)?;
         let range = self.program.get_op_range(pc + 2)?;
         let content = self.program.get_content(range)?;
@@ -246,23 +276,27 @@ impl<'a> Runtime<'a> {
             _ => return Err(anyhow!("Unknown literal type: {}", literal_type)),
         };
 
+        self.constant_values.insert(pc, value.clone());
         self.evaluation_stack.push(Cow::Owned(value));
         Ok(10)
     }
 
     fn call(&mut self, pc: usize) -> anyhow::Result<usize> {
-        let helper_range = self.program.get_op_range(pc + 1)?;
-        let helper_bytes = self.program.get_content(helper_range)?;
-        let helper_name = std::str::from_utf8(helper_bytes)?;
+        if !self.helper_names.contains_key(&pc) {
+            let helper_range = self.program.get_op_range(pc + 1)?;
+            let helper_bytes = self.program.get_content(helper_range)?;
+            let helper_name = std::str::from_utf8(helper_bytes)?.to_owned();
+            self.helper_names.insert(pc, helper_name);
+        }
+        let helper_name = self.helper_names.get(&pc).expect("cached helper name");
         let arg_count = self.program.get_op(pc + 9)? as usize;
 
-        let length = self.evaluation_stack.len();
         let args = self
             .evaluation_stack
-            .get_drain_range(length - arg_count..length)
+            .drain_top(arg_count)
             .ok_or_else(|| anyhow!("Not enough arguments on evaluation stack"))?;
 
-        let result = match helper_name {
+        let result = match helper_name.as_str() {
             "length" => {
                 let arg = args
                     .first()
@@ -317,12 +351,29 @@ impl<'a> Runtime<'a> {
 
     #[inline(always)]
     fn iterate(&mut self, pc: usize) -> anyhow::Result<usize> {
-        let item_name_range = self.program.get_op_range(pc + 1)?;
-        let index_name_range = self.program.get_op_range(pc + 9)?;
-        let done_target = self.program.get_op_u32(pc + 17)? as usize;
-
-        let item_name = std::str::from_utf8(self.program.get_content(item_name_range)?)?;
-        let index_name = std::str::from_utf8(self.program.get_content(index_name_range)?)?;
+        if !self.iterate_metadata.contains_key(&pc) {
+            let item_name_range = self.program.get_op_range(pc + 1)?;
+            let index_name_range = self.program.get_op_range(pc + 9)?;
+            let done_target = self.program.get_op_u32(pc + 17)? as usize;
+            let item_name = std::str::from_utf8(self.program.get_content(item_name_range)?)?;
+            let index_name = std::str::from_utf8(self.program.get_content(index_name_range)?)?;
+            self.iterate_metadata.insert(
+                pc,
+                Rc::new(IterateMetadata {
+                    item_name: item_name.to_owned(),
+                    index_name: index_name.to_owned(),
+                    done_target,
+                }),
+            );
+        }
+        let metadata = Rc::clone(
+            self.iterate_metadata
+                .get(&pc)
+                .expect("cached iterate metadata"),
+        );
+        let item_name = metadata.item_name.as_str();
+        let index_name = metadata.index_name.as_str();
+        let done_target = metadata.done_target;
 
         let base_depth = *self.scope_marks.entry(pc).or_insert(self.scope_stack.len());
         self.cleanup_scope_to_depth(base_depth);
