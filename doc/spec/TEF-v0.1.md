@@ -1,191 +1,788 @@
-# Template Execution Format (TEF) Specification
+# Template Execution Format (TEF) Specification v0.1
 
-## Table Binary Representation
+**Scope**: Bytecode Format & Runtime Specification  
+**Status**: Stable  
+**Version**: 0.1.0  
+**Last Updated**: 2026-07-26  
+**Runtime Languages**: Rust, Go, TypeScript  
+**Produced By**: Meld Compiler  
 
-| Represent   | Version | Instruction Length | Content Length | Checksum  | Instruction Body                 | Template Content             |
-| ----------- | ------- | ------------------ | -------------- | --------- | -------------------------------- | ---------------------------- |
-| **Size**    | 2 bytes | 4 bytes            | 4 bytes        | 32 bytes  | as defined by Instruction length | as defined by content length |
-| **Example** | 1       | 213213             | 21323          | xxxx-xxxx | `[Opcodes...]`                   | `<h1>Hello...`               |
+## Important: Meld vs TEF
 
-_(Note: All integers are strictly **little-endian**)_
+This specification defines the **TEF bytecode format** - the binary output that **runtimes** execute.
 
-## Rust Runtime Status
+- **Meld Spec** (see `MELD-v0.1.md`) = What `.meld` template files can contain
+- **TEF Spec** (this file) = What runtimes execute (bytecode format)
 
-- Implemented: `END`, `TEXT`, `OUT`, `CONDITION`, `JUMP`, `POP_SCOPE`, `CALL`, `PUSH_CONST`, `LOOKUP`, `LOOKUP_OUT`, `EQ`, `NEQ`, `GT`, `GTE`, `LT`, `LTE`, `NOT`, `AND`, `OR`, `EMPTY`, `NOT_EMPTY`, `LENGTH`, `CONCAT`, `ITERATE`
-- Not yet implemented: math opcodes (`ADD`, `SUB`, `MUL`, `DIV`, `MOD`) are still reserved.
+**Pipeline:**
+```
+Meld Template File (.meld)
+        ↓
+    [COMPILER]
+        ↓
+TEF Bytecode (.bhtml)  ← This spec defines the format
+        ↓
+    [RUNTIME]  (uses this TEF spec)
+        ↓
+    Output
+```
+
+This document focuses on the **runtime level** - the binary bytecode format that runtimes execute.
 
 ---
 
-## Render Format
+## Table of Contents
 
-These opcodes control the primary flow of rendering the template, outputting text, and looping or branching.
-
-### END (0x00)
-
-Signals the runtime to halt the execution of the current block or template and return the rendered output.
-
-- **Size:** 1 byte
-
-### TEXT (0x01)
-
-Outputs raw static text directly from the template content block.
-
-- **Size:** 9 bytes
-- **Arg 1 (4 bytes):** Offset start in the content block
-- **Arg 2 (4 bytes):** Offset end of the text to render
-
-### OUT (0x02)
-
-Pops a value from the evaluation stack and output the resulting value as text
-
-- **Size:** 1 byte
-
-### CONDITION (0x03)
-
-Checks the boolean value on top of the evaluation stack or evaluates a condition
-
-- **Size:** 5 bytes
-- **Arg 1 (4 bytes):** Jump offset to jump if the condition evaluates to `false`
-
-_(**Note:** Current runtime evaluates the condition expression before `CONDITION` and then performs a false-branch jump.)_
-
-```html
-{if expression} ... {else if expression} ... {else} ... {/if}
-```
-
-### ITERATE (0x04)
-
-Iterates over an array/slice. Expects the collection and starting index to be pushed to the evaluation stack prior to execution.
-
-- **Size:** 21 bytes
-- **Arg 1 (4 bytes):** Content offset start pointing the loop item variable name
-- **Arg 2 (4 bytes):** Content offset end of the loop item variable name
-- **Arg 3 (4 bytes):** Content offset start pointing the loop index variable name
-- **Arg 4 (4 bytes):** Content offset end of the loop index variable name
-- **Arg 5 (4 bytes):** Jump when the iteration is complete
-
-_(**Current runtime behavior:** reads collection from top of evaluation stack, pushes `{item_name, index_name}` scope object per iteration, and jumps to `Arg 5` when complete.)_
-
-```html
-{each expression as name, index}
-<!-- Iterate Block -->
-{/each}
-```
-
-### JUMP (0x05)
-
-Unconditionally moves the instruction pointer to a specific bytecode offset.
-
-- **Size:** 5 bytes
-- **Arg 1 (4 bytes):** IR body offset
-
-### POP_SCOPE (0x06)
-
-Pops the top stack frame from the scope stack, cleaning up localized loop or block variable to prevent scope leaks
-
-- **Size:** 1 byte
+1. [File Format](#file-format)
+2. [Opcodes Reference](#opcodes-reference)
+3. [Stack Machine](#stack-machine)
+4. [Execution Model](#execution-model)
+5. [Error Handling](#error-handling)
+6. [Roadmap](#roadmap)
 
 ---
 
-## Expression Instruction (Stack Machine)
+## File Format
 
-The expression Instruction operates on an Evaluation Stack. Operators pop their required arguments, compute the result, and push it back onto the stack.
+### Binary Layout
 
-### CALL (0x10)
-
-Calls a registered helper function or external method.
-
-- **Size:** 10 bytes
-- **Arg 1 (4 bytes):** Offset start pointing the variable name
-- **Arg 2 (4 bytes):** Offset end of the variable name
-- **Arg 2 (1 byte):** Arg Count determining how many values to pop and pass
-
-_(**Current runtime helpers:** `length`, `empty`, `not_empty`, `concat`, `coalesce`.)_
-
-```html
-{{ toCapitalize(name) }} is {{ age }} years old
+```
+[Header (14 bytes)] [Bytecode] [Content Block]
 ```
 
-### PUSH_CONST (0x11)
+| Field | Size | Type | Description |
+|-------|------|------|-------------|
+| Version | 2 bytes | u16 (LE) | Format version (currently 1) |
+| Instruction Length | 4 bytes | u32 (LE) | Size of bytecode section |
+| Content Length | 4 bytes | u32 (LE) | Size of content block |
+| Checksum | 4 bytes | u32 (LE) | CRC32 of bytecode + content |
+| **Bytecode** | variable | bytes | Instruction sequence |
+| **Content** | variable | UTF-8 | Static strings and literals |
 
-Pushes a literal value onto the evaluation stack.
+### Byte Order
 
-- **Size:** 10 bytes
-- **Arg 1 (1 byte):** TYPE (Literal Type ID)
-- **Arg 1 (4 bytes):** Offset start pointing to the value
-- **Arg 2 (4 bytes):** Offset end of the value
+All multi-byte integers are **little-endian (LE)**.
 
-```html
-<!-- String -->
-"hello world"
+### Example
 
-<!-- Float -->
-3.14
-
-<!-- Integer -->
-312
+```
+[Ver: 01 00] [Len: D5 03 00 00] [Clen: 39 05 00 00] [CRC32: xxxxxxxx] [... bytecode ...] [... content ...]
+Version 1       Length 981        Content 1337          Checksum       Instruction body    Template content
 ```
 
-### LOOKUP (0x12)
+---
 
-Lookup a variable in the current Scope Stack, traversing nested paths (e.g., `user.name.first`)
+## Opcodes Reference
 
-- **Size:** 9 bytes
-- **Arg 1 (4 bytes):** Offset start pointing the variable name
-- **Arg 2 (4 bytes):** Offset end of the variable name
+### Render Opcodes (0x00-0x06)
 
-```html
-username
+Opcodes that control template rendering flow, text output, and control structures.
+
+#### END (0x00)
+
+Signals runtime to halt execution of current block or template.
+
+**Bytecode**: 1 byte
+```
+0x00
 ```
 
-### LOOKUP_OUT (0x13)
+**Behavior**: Stops execution, returns accumulated output
 
-Lookup a variable in the current Scope Stack, traversing nested paths (e.g., `user.name.first`) and output the value directly into the output.
-
-- **Size:** 9 bytes
-- **Arg 1 (4 bytes):** Offset start pointing the variable name
-- **Arg 2 (4 bytes):** Offset end of the variable name
-
-_(**Note:** This is the optimized behaviour of LOOKUP and OUT instruction, because push value into evaluation is quite expensive we merge the instructions instead)_
-
-```html
-{{ username }}
+**Example**: End of template
+```
+[TEXT ...] [END]
 ```
 
-### Logic and String Operators (0x20 - 0x2C)
+---
 
-All of these operators consume **0 argument** in bytecode. They exclusively pop from the push to the stack
+#### TEXT (0x01)
 
-- **Size:** 1 byte each
+Outputs static text directly from the content block.
 
-| OP Code (Hex) | Name      | Stack Action (Pop -> Push) | Description                                    |
-| ------------- | --------- | -------------------------- | ---------------------------------------------- |
-| **0x20**      | EQ        | Pops 2, pushes 1 (Bool)    | Equals                                         |
-| **0x21**      | NE        | Pops 2, pushes 1 (Bool)    | Not Equal                                      |
-| **0x22**      | GT        | Pops 2, pushes 1 (Bool)    | Greater                                        |
-| **0x23**      | GTE       | Pops 2, pushes 1 (Bool)    | Greater/Equal                                  |
-| **0x24**      | LT        | Pops 2, pushes 1 (Bool)    | Less                                           |
-| **0x25**      | LTE       | Pops 2, pushes 1 (Bool)    | Less/Equal                                     |
-| **0x26**      | NOT       | Pops 1, pushes 1 (Bool)    | Logical Not                                    |
-| **0x27**      | AND       | Pops 2, pushes 1 (Bool)    | Logical And                                    |
-| **0x28**      | OR        | Pops 2, pushes 1 (Bool)    | Logical Or                                     |
-| **0x29**      | EMPTY     | Pops 1, pushes 1 (Bool)    | Is Length 0 or Null/undefined                  |
-| **0x2A**      | NOT EMPTY | Pops 1, pushes 1 (Bool)    | Is Length greater than 0 or not null/undefined |
-| **0x2B**      | LENGTH    | Pops 1, pushes 1 (Number)  | Array or string or Map length                  |
-| **0x2C**      | CONCAT    | Pops 2+, pushes 1 (String) | Concatenate string-like values                 |
+**Bytecode**: 9 bytes
+```
+0x01 [offset_start: 4 bytes LE] [offset_end: 4 bytes LE]
+```
 
-### Math Operator
+**Arguments**:
+- `offset_start`: Position in content block where text begins
+- `offset_end`: Position in content block where text ends
+
+**Stack Effect**: (no change)
+
+**Example**: Output "Hello "
+```
+0x01 [0x00 00 00 00] [0x06 00 00 00]  (content: "Hello ")
+```
+
+---
+
+#### OUT (0x02)
+
+Pops value from evaluation stack and outputs it as text.
+
+**Bytecode**: 1 byte
+```
+0x02
+```
+
+**Stack Effect**: 
+- **Before**: `[... value]`
+- **After**: `[...]`
+
+**Behavior**: 
+- Pops top value
+- Converts to string
+- Appends to output
+- Handles null/undefined as empty string
+
+**Example**: After LOOKUP_OUT or expression evaluation
+```
+[LOOKUP "name"] [OUT]
+```
+
+---
+
+#### CONDITION (0x03)
+
+Evaluates condition and conditionally jumps.
+
+**Bytecode**: 5 bytes
+```
+0x03 [jump_offset: 4 bytes LE]
+```
+
+**Arguments**:
+- `jump_offset`: Bytecode offset to jump if condition is false
+
+**Stack Effect**:
+- **Before**: `[... condition_bool]`
+- **After**: `[...]` (after consuming condition)
+
+**Behavior**:
+- Pops boolean from stack
+- If false, jumps to `jump_offset`
+- If true, continues to next instruction
+
+**Example**: `{if age > 18} ... {/if}`
+```
+[PUSH 18] [LOOKUP "age"] [GT] [CONDITION jump_to_end] [...] [END]
+```
+
+---
+
+#### ITERATE (0x04)
+
+Begins iteration over array or collection.
+
+**Bytecode**: 21 bytes
+```
+0x04 
+[item_name_start: 4 bytes LE] [item_name_end: 4 bytes LE]
+[index_name_start: 4 bytes LE] [index_name_end: 4 bytes LE]
+[loop_end_offset: 4 bytes LE]
+```
+
+**Arguments**:
+- `item_name`: Variable name for current item (from content block)
+- `index_name`: Variable name for current index (from content block)
+- `loop_end_offset`: Bytecode offset after loop
+
+**Stack Effect**:
+- **Before**: `[... array, start_index]`
+- **After**: `[...]`
+
+**Behavior**:
+- Pops array and start index from stack
+- Creates new scope with `item_name` and `index_name`
+- Executes loop body
+- Jumps to `loop_end_offset` when complete
+
+**Example**: `{each items as item, idx} ... {/each}`
+```
+[LOOKUP "items"] [PUSH 0] 
+[ITERATE item_offset idx_offset loop_end] 
+[... loop body ...] 
+[JUMP back_to_iterate]
+```
+
+---
+
+#### JUMP (0x05)
+
+Unconditionally jumps to offset.
+
+**Bytecode**: 5 bytes
+```
+0x05 [target_offset: 4 bytes LE]
+```
+
+**Arguments**:
+- `target_offset`: Bytecode offset to jump to
+
+**Stack Effect**: (no change)
+
+**Behavior**: Sets instruction pointer to `target_offset`
+
+**Example**: Loop back
+```
+[... loop body ...] 
+[JUMP back_to_iterate]
+```
+
+---
+
+#### POP_SCOPE (0x06)
+
+Pops scope frame, cleaning up loop/block variables.
+
+**Bytecode**: 1 byte
+```
+0x06
+```
+
+**Stack Effect**: (scope stack, not evaluation stack)
+
+**Behavior**: 
+- Removes top scope frame
+- Variables in that scope become inaccessible
+- Prevents scope leaks
+
+**Example**: After loop
+```
+[ITERATE ...] [...] [POP_SCOPE]
+```
+
+---
+
+### Expression Opcodes (0x10-0x13)
+
+Opcodes for variable lookup and function calls.
+
+#### CALL (0x10)
+
+Calls built-in helper function or registered external function.
+
+**Bytecode**: 10 bytes
+```
+0x10 [func_name_start: 4 bytes LE] [func_name_end: 4 bytes LE] [arg_count: 1 byte]
+```
+
+**Arguments**:
+- `func_name`: Function name (from content block)
+- `arg_count`: Number of arguments to pop
+
+**Stack Effect**:
+- **Before**: `[... arg1, arg2, ..., argN]` (N = arg_count)
+- **After**: `[... result]`
+
+**Behavior**:
+- Pops `arg_count` values from stack
+- Calls function with those arguments
+- Pushes result back to stack
+
+**Built-in Functions**:
+| Name | Args | Description |
+|------|------|-------------|
+| `length` | 1 | Array/string length |
+| `concat` | 2+ | Concatenate strings |
+| `empty` | 1 | Check if empty |
+| `not_empty` | 1 | Check if not empty |
+| `coalesce` | 2+ | First non-null value |
+| `toUpperCase` | 1 | Uppercase string |
+
+**Example**: `{{ length(items) }}`
+```
+[LOOKUP "items"] [CALL length 1] [OUT]
+```
+
+---
+
+#### PUSH_CONST (0x11)
+
+Pushes literal constant onto evaluation stack.
+
+**Bytecode**: 10 bytes
+```
+0x11 [type: 1 byte] [value_start: 4 bytes LE] [value_end: 4 bytes LE]
+```
+
+**Arguments**:
+- `type`: Literal type (see Literal Types section)
+- `value_start`, `value_end`: Content block offsets
+
+**Stack Effect**:
+- **Before**: `[...]`
+- **After**: `[... literal_value]`
+
+**Behavior**:
+- Reads raw value from content block
+- Parses according to type
+- Pushes parsed value to stack
+
+**Example**: Push string "hello"
+```
+0x11 [0x30] [0x00 00 00 00] [0x05 00 00 00]  (type: STRING, offsets point to "hello")
+```
+
+---
+
+#### LOOKUP (0x12)
+
+Looks up variable in scope stack without output.
+
+**Bytecode**: 9 bytes
+```
+0x12 [var_name_start: 4 bytes LE] [var_name_end: 4 bytes LE]
+```
+
+**Arguments**:
+- `var_name`: Variable name (from content block, supports dot notation: `user.name.first`)
+
+**Stack Effect**:
+- **Before**: `[...]`
+- **After**: `[... value]`
+
+**Behavior**:
+- Searches scope stack for variable
+- Traverses properties using dot notation
+- Pushes value to stack
+- Returns null if not found
+
+**Example**: Lookup for expression (not output)
+```
+[LOOKUP "user.age"] [PUSH 18] [GT]
+```
+
+---
+
+#### LOOKUP_OUT (0x13)
+
+Looks up variable and directly outputs it (optimized LOOKUP + OUT).
+
+**Bytecode**: 9 bytes
+```
+0x13 [var_name_start: 4 bytes LE] [var_name_end: 4 bytes LE]
+```
+
+**Arguments**:
+- `var_name`: Variable name (supports dot notation)
+
+**Stack Effect**: (no change to evaluation stack)
+
+**Behavior**:
+- Searches scope stack for variable
+- Converts to string
+- Appends to output
+- Skips stack intermediate step
+
+**Example**: `{{ name }}`
+```
+0x13 [name_offset_start] [name_offset_end]
+```
+
+---
+
+### Logic & Comparison Opcodes (0x20-0x2C)
+
+All logic and comparison opcodes operate on the evaluation stack, popping operands and pushing results.
+
+#### EQ (0x20) - Equality
+
+**Bytecode**: 1 byte
+```
+0x20
+```
+
+**Stack Effect**:
+- **Before**: `[... left, right]`
+- **After**: `[... bool_result]`
+
+**Behavior**: `left == right` (value equality, not reference)
+
+**Example**: `{{ age == 18 }}`
+```
+[LOOKUP "age"] [PUSH 18] [EQ] [OUT]
+```
+
+---
+
+#### NEQ (0x21) - Not Equal
+
+**Bytecode**: 1 byte
+```
+0x21
+```
+
+**Stack Effect**:
+- **Before**: `[... left, right]`
+- **After**: `[... bool_result]`
+
+**Behavior**: `left != right`
+
+---
+
+#### GT (0x22) - Greater Than
+
+**Bytecode**: 1 byte
+```
+0x22
+```
+
+**Stack Effect**:
+- **Before**: `[... left, right]`
+- **After**: `[... bool_result]`
+
+**Behavior**: `left > right`
+
+---
+
+#### GTE (0x23) - Greater Than or Equal
+
+**Bytecode**: 1 byte
+```
+0x23
+```
+
+**Stack Effect**:
+- **Before**: `[... left, right]`
+- **After**: `[... bool_result]`
+
+**Behavior**: `left >= right`
+
+---
+
+#### LT (0x24) - Less Than
+
+**Bytecode**: 1 byte
+```
+0x24
+```
+
+**Stack Effect**:
+- **Before**: `[... left, right]`
+- **After**: `[... bool_result]`
+
+**Behavior**: `left < right`
+
+---
+
+#### LTE (0x25) - Less Than or Equal
+
+**Bytecode**: 1 byte
+```
+0x25
+```
+
+**Stack Effect**:
+- **Before**: `[... left, right]`
+- **After**: `[... bool_result]`
+
+**Behavior**: `left <= right`
+
+---
+
+#### NOT (0x26) - Logical NOT
+
+**Bytecode**: 1 byte
+```
+0x26
+```
+
+**Stack Effect**:
+- **Before**: `[... value]`
+- **After**: `[... bool_result]`
+
+**Behavior**: `!value` (logical negation)
+
+---
+
+#### AND (0x27) - Logical AND
+
+**Bytecode**: 1 byte
+```
+0x27
+```
+
+**Stack Effect**:
+- **Before**: `[... left, right]`
+- **After**: `[... bool_result]`
+
+**Behavior**: `left && right` (both must be truthy)
+
+---
+
+#### OR (0x28) - Logical OR
+
+**Bytecode**: 1 byte
+```
+0x28
+```
+
+**Stack Effect**:
+- **Before**: `[... left, right]`
+- **After**: `[... bool_result]`
+
+**Behavior**: `left || right` (either can be truthy)
+
+---
+
+#### EMPTY (0x29) - Is Empty
+
+**Bytecode**: 1 byte
+```
+0x29
+```
+
+**Stack Effect**:
+- **Before**: `[... value]`
+- **After**: `[... bool_result]`
+
+**Behavior**: Returns true if value has length 0, is null, or is undefined
+
+---
+
+#### NOT_EMPTY (0x2A) - Is Not Empty
+
+**Bytecode**: 1 byte
+```
+0x2A
+```
+
+**Stack Effect**:
+- **Before**: `[... value]`
+- **After**: `[... bool_result]`
+
+**Behavior**: Inverse of EMPTY
+
+---
+
+#### LENGTH (0x2B) - Get Length
+
+**Bytecode**: 1 byte
+```
+0x2B
+```
+
+**Stack Effect**:
+- **Before**: `[... value]`
+- **After**: `[... number]`
+
+**Behavior**: Returns length of array, string, or object
+
+---
+
+#### CONCAT (0x2C) - Concatenate
+
+**Bytecode**: 1 byte
+```
+0x2C
+```
+
+**Stack Effect**:
+- **Before**: `[... arg1, arg2, ..., argN]` (variable count)
+- **After**: `[... string_result]`
+
+**Behavior**: Concatenates 2+ string values
+
+---
+
+### Math Opcodes (0x30-0x34) - Reserved for v0.2
+
+| Code | Name | Purpose |
+|------|------|---------|
+| 0x30 | ADD | Addition |
+| 0x31 | SUB | Subtraction |
+| 0x32 | MUL | Multiplication |
+| 0x33 | DIV | Division |
+| 0x34 | MOD | Modulus |
+
+These are reserved but not yet implemented in v0.1.
 
 ---
 
 ## Literal Types
 
-Used by the `PUSH_CONST` instruction to dictate how the runtime should cast the raw string data located in the Content block.
+Used by `PUSH_CONST` instruction to specify how to parse the raw value from content block.
 
-| Type Code (Hex) | Name    | Description              |
-| --------------- | ------- | ------------------------ |
-| **0x30**        | STRING  | Parsed as raw text       |
-| **0x31**        | FLOAT   | Parsed as float 64 bit   |
-| **0x32**        | INTEGER | Parsed as integer 64 bit |
-| **0x33**        | BOOLEAN | Parsed as true/false     |
-| **0x34**        | NULL    | Parsed as null value     |
+| Code | Name | Encoding | Example |
+|------|------|----------|---------|
+| 0x30 | STRING | UTF-8 text | `hello` |
+| 0x31 | FLOAT | IEEE 754 f64 string | `3.14` |
+| 0x32 | INTEGER | 64-bit signed int | `42` |
+| 0x33 | BOOLEAN | `true`/`false` | `true` |
+| 0x34 | NULL | `null` | `null` |
+
+---
+
+## Stack Machine
+
+### Evaluation Stack
+
+The runtime maintains an evaluation stack for expression evaluation.
+
+**Operations**:
+- `PUSH`: Add value to stack top
+- `POP`: Remove value from stack top
+- `PEEK`: View top value without removing
+
+### Stack Example
+
+**Expression**: `age > 18 && verified`
+
+```
+1. LOOKUP "age"         → [18]
+2. PUSH 18              → [18, 18]
+3. GT                   → [true]
+4. LOOKUP "verified"    → [true, true]
+5. AND                  → [true]
+6. CONDITION            → [] (condition checked)
+```
+
+---
+
+## Scope Stack
+
+The runtime maintains a scope stack for variable resolution.
+
+**Operations**:
+- `PUSH_SCOPE`: Add new scope frame (at ITERATE/CONDITION)
+- `POP_SCOPE`: Remove top scope frame
+- `LOOKUP`: Search from top scope downward
+
+### Scope Resolution
+
+```
+[Global Scope]
+  └─ [Loop Scope 1]
+      └─ [Loop Scope 2]
+          └─ [Current]
+```
+
+Variables are searched from current scope upward until found.
+
+---
+
+## Execution Model
+
+### Single-Pass Execution
+
+TEF is designed for single-pass, streaming execution:
+
+1. Read opcode
+2. Execute operation
+3. Update output
+4. Repeat until END
+
+### No Optimization Passes
+
+The bytecode assumes:
+- No dead code elimination
+- No constant folding
+- Compiler handles all optimizations
+
+### Deterministic Output
+
+Given the same input data, TEF produces identical output every time:
+- No randomness
+- No system-dependent behavior
+- Byte-for-byte identical across platforms
+
+---
+
+## Error Handling
+
+### Compile-Time Errors
+
+Compiler must ensure valid bytecode:
+- All JUMP/CONDITION offsets are valid
+- All variables referenced exist
+- All ITERATE collections are arrays
+
+### Runtime Errors
+
+Runtimes should handle gracefully:
+- Missing variables → empty string (for output) or null (for evaluation)
+- Type mismatches → attempt conversion or error
+- Array out of bounds → null
+- Stack underflow → abort with error
+
+### Error Recovery
+
+Recommended behavior:
+- **Output operations**: Continue with empty string
+- **Evaluation operations**: Continue with null
+- **Critical errors**: Abort and return error message
+
+---
+
+## Runtime Implementation Checklist
+
+- [x] Rust: All v0.1 opcodes
+- [x] Go: All v0.1 opcodes
+- [x] TypeScript: All v0.1 opcodes
+- [ ] PHP: Planned
+- [ ] Python: Planned
+
+---
+
+## Roadmap
+
+### v0.2 (Q3 2026)
+
+**Runtime Features** (TEF bytecode support):
+- [ ] Math opcodes (ADD, SUB, MUL, DIV, MOD)
+- [ ] Enhanced error codes
+- [ ] Stack depth limits
+- [ ] Optimization hints in bytecode
+
+### v0.3 (Q4 2026)
+
+**Runtime Features**:
+- [ ] Scope serialization
+- [ ] Streaming opcodes
+- [ ] Async execution markers
+- [ ] Filter execution opcodes
+
+### v1.0 (2027)
+
+**Runtime Features**:
+- [ ] Bytecode versioning scheme
+- [ ] Performance profiling opcodes
+- [ ] Debugging hooks
+- [ ] Bytecode optimization dialect
+
+---
+
+## Compatibility
+
+| Opcode | Rust | Go | TypeScript | Description |
+|--------|------|----|----|-----------|
+| 0x00-0x06 | ✅ | ✅ | ✅ | Render opcodes |
+| 0x10-0x13 | ✅ | ✅ | ✅ | Expression opcodes |
+| 0x20-0x2C | ✅ | ✅ | ✅ | Logic & comparison |
+| 0x30-0x34 | 🔲 | 🔲 | 🔲 | Math opcodes |
+
+---
+
+## References
+
+- [Meld Template Language Spec](./MELD-v0.1.md)
+- [Runtime Performance](../RUNTIME_PERFORMANCE.md)
+- [Compiler Source](../../src/)
+
+---
+
+## Changelog
+
+### v0.1.0 (2026-07-26)
+
+- Comprehensive TEF specification
+- Opcodes documentation (render, expression, logic)
+- Stack machine model
+- Literal types
+- Scope and evaluation stacks
+- Error handling guidelines
+- Runtime implementation status
+- Roadmap (v0.2, v0.3, v1.0)
