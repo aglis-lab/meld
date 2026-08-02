@@ -1,7 +1,7 @@
-mod adapter;
 mod builder;
+mod compiler;
 mod expression;
 mod module;
 
-use adapter::*;
 pub use builder::*;
+pub use compiler::*;

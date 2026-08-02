@@ -1,0 +1,14 @@
+-- React
+@types/react
+@types/react-dom
+@vitejs/plugin-react
+react
+react-dom
+
+-- Svelte
+@sveltejs/vite-plugin-svelte
+svelte
+
+-- Vue
+@vitejs/plugin-vue
+vue
